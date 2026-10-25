@@ -107,3 +107,7 @@ version. If a drag from Dolphin does not register:
 | `resolve_audio_encoder.py` | The whole application (engine + GUI) |
 | `run.sh` | Creates the venv and launches the app |
 | `requirements.txt` | The single optional dependency (`tkinterdnd2`) |
+
+## License
+
+MIT — see [LICENSE](LICENSE).
