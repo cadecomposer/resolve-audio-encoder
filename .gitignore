@@ -1,0 +1,10 @@
+# Virtual environment created by run.sh
+.venv/
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Transcode outputs and local test media (keep the repo small)
+*.mkv
+*.mp4

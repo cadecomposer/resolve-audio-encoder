@@ -1,0 +1,3 @@
+# Drag & drop support. Everything else uses the Python standard library.
+# The GUI still runs without this, but drag-and-drop will be disabled.
+tkinterdnd2>=0.4.0
