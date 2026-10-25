@@ -11,6 +11,8 @@ handles happily.
 - Audio codec: **FLAC** (default, lossless), **OPUS**, or **MP3**
 - Custom **bitrate** for OPUS/MP3 (not applicable to lossless FLAC)
 - Copies video, subtitles and all **multiple audio tracks** into a new MKV
+- Optional **MP4 remux**: after transcoding, copy the result into an MP4
+  container and delete the intermediate MKV (subtitles/attachments are dropped)
 - Optional **auto-start** when files are added (off by default)
 - Preferences persist to a config file
 - UI palette inspired by DaVinci Resolve
@@ -23,6 +25,19 @@ My Video.mp4   ->   My Video [FLAC].mkv
 
 If a file with that name already exists, ` (2)`, ` (3)` … is appended so the
 tool never overwrites anything (including your source files).
+
+With **“Also remux to MP4 (delete the MKV afterwards)”** enabled the result is
+instead:
+
+```
+My Video.mp4   ->   My Video [FLAC].mp4
+```
+
+The MP4 is a stream copy of the MKV, so the video is still untouched. MP4 has
+no place for subtitles or font attachments, so those are not carried over; if
+the remux fails for any reason the MKV is kept and the job is marked failed.
+Note that FLAC and OPUS in MP4 are legal but not universally supported — if your
+player or Resolve refuses the MP4, use MP3 or keep the default MKV output.
 
 ---
 
@@ -63,8 +78,9 @@ python3 -m venv .venv
 1. Launch with `./run.sh`.
 2. Drag videos into the window, or click **Add Files…**.
 3. Pick the audio **codec** and, if not FLAC, a **bitrate**.
-4. Click **Start** (or tick **Auto-start when files are added**).
-5. Find the `... [CODEC].mkv` files next to your originals.
+4. Optionally tick **Also remux to MP4 (delete the MKV afterwards)**.
+5. Click **Start** (or tick **Auto-start when files are added**).
+6. Find the `... [CODEC].mkv` (or `.mp4`) files next to your originals.
 
 **Stop** cancels the current job and leaves the rest queued. **Remove** deletes
 the selected rows and **Clear** empties the whole queue (both are disabled for
@@ -78,7 +94,8 @@ Settings are stored at:
 ${XDG_CONFIG_HOME:-~/.config}/resolve-audio-encoder/config.json
 ```
 
-The chosen codec, per-codec bitrate, and the auto-start toggle are remembered.
+The chosen codec, per-codec bitrate, the auto-start toggle and the MP4-remux
+toggle are remembered.
 
 ## Drag & drop on Wayland
 

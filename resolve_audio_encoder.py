@@ -10,6 +10,10 @@ into a Resolve-friendly codec (FLAC by default, or OPUS / MP3).
 
 Output files are written next to the source file as "<name> [CODEC].mkv".
 
+Optionally the finished MKV can be remuxed (stream copy, no re-encode) into
+"<name> [CODEC].mp4"; the intermediate MKV is then deleted.  MP4 cannot hold
+subtitles or attachments, so those are dropped in that second pass.
+
 Requires: ffmpeg / ffprobe on PATH.
 Optional: tkinterdnd2 (drag-and-drop), kdialog or zenity (native file dialog).
 """
@@ -181,6 +185,37 @@ def build_ffmpeg_cmd(ffmpeg: str, source: Path, codec: str, bitrate: str,
     return cmd
 
 
+def unique_remux_path(mkv_path: Path) -> Path:
+    """Return a non-existing ``.mp4`` path next to ``mkv_path``."""
+    candidate = mkv_path.with_suffix(".mp4")
+    counter = 2
+    while candidate.exists():
+        candidate = mkv_path.with_name(f"{mkv_path.stem} ({counter}).mp4")
+        counter += 1
+    return candidate
+
+
+def build_remux_cmd(ffmpeg: str, source: Path, output: Path) -> list[str]:
+    """Build a command that copies ``source`` into an MP4 container.
+
+    Only video and audio are mapped: MP4 cannot carry the subtitle and
+    attachment streams an MKV may hold, and ``-map`` entries with ``?`` keep
+    the command valid for files that lack a video track.
+    """
+    return [
+        ffmpeg, "-hide_banner", "-nostdin", "-y",
+        "-i", str(source),
+        "-map", "0:v?", "-map", "0:a?",
+        "-c", "copy",
+        "-map_metadata", "0",
+        "-map_chapters", "0",
+        "-max_muxing_queue_size", "4096",
+        "-progress", "pipe:1", "-nostats",
+        "-loglevel", "error",
+        str(output),
+    ]
+
+
 def run_transcode(
     ffmpeg: str,
     source: Path,
@@ -194,6 +229,32 @@ def run_transcode(
 ) -> tuple[bool, str]:
     """Run the transcoding subprocess. Returns ``(success, error_message)``."""
     cmd = build_ffmpeg_cmd(ffmpeg, source, codec, bitrate, output)
+    return _run_ffmpeg(cmd, output, duration, on_progress, stop_event, on_proc)
+
+
+def run_remux(
+    ffmpeg: str,
+    source: Path,
+    output: Path,
+    duration: float = 0.0,
+    on_progress: Optional[Callable[[float], None]] = None,
+    stop_event: Optional[threading.Event] = None,
+    on_proc: Optional[Callable[[Optional[subprocess.Popen]], None]] = None,
+) -> tuple[bool, str]:
+    """Copy ``source`` into ``output`` (MP4) without re-encoding."""
+    cmd = build_remux_cmd(ffmpeg, source, output)
+    return _run_ffmpeg(cmd, output, duration, on_progress, stop_event, on_proc)
+
+
+def _run_ffmpeg(
+    cmd: list[str],
+    output: Path,
+    duration: float = 0.0,
+    on_progress: Optional[Callable[[float], None]] = None,
+    stop_event: Optional[threading.Event] = None,
+    on_proc: Optional[Callable[[Optional[subprocess.Popen]], None]] = None,
+) -> tuple[bool, str]:
+    """Run an ``ffmpeg`` command, tracking progress. Returns ``(ok, error)``."""
     tail: list[str] = []
 
     try:
@@ -400,6 +461,7 @@ class ResolveAudioEncoder(_BaseTk):
         self.var_codec = tk.StringVar(value="FLAC")
         self.var_bitrate = tk.StringVar(value=DEFAULT_BITRATES["FLAC"])
         self.var_auto_start = tk.BooleanVar(value=False)
+        self.var_remux_mp4 = tk.BooleanVar(value=False)
         self.var_status = tk.StringVar(value="Ready")
         self.var_counts = tk.StringVar(value="")
         self.bitrates = dict(DEFAULT_BITRATES)
@@ -545,7 +607,15 @@ class ResolveAudioEncoder(_BaseTk):
             bar, text="Auto-start when files are added",
             variable=self.var_auto_start, command=self._on_setting_change,
             style="TCheckbutton")
-        self.chk_auto.grid(row=0, column=4, sticky="w", padx=(28, 0))
+        self.chk_auto.grid(row=1, column=0, columnspan=2, sticky="w",
+                          pady=(8, 0))
+
+        self.chk_remux = ttk.Checkbutton(
+            bar, text="Also remux to MP4 (delete the MKV afterwards)",
+            variable=self.var_remux_mp4, command=self._on_setting_change,
+            style="TCheckbutton")
+        self.chk_remux.grid(row=1, column=2, columnspan=6, sticky="w",
+                            padx=(20, 0), pady=(8, 0))
 
         self.btn_browse = ttk.Button(
             bar, text="Add Files…", command=self._choose_files)
@@ -577,7 +647,7 @@ class ResolveAudioEncoder(_BaseTk):
         self.tree.column("name", width=420, anchor="w")
         self.tree.column("tracks", width=60, anchor="center", stretch=False)
         self.tree.column("duration", width=80, anchor="center", stretch=False)
-        self.tree.column("status", width=110, anchor="w", stretch=False)
+        self.tree.column("status", width=130, anchor="w", stretch=False)
         self.tree.column("progress", width=90, anchor="center", stretch=False)
         self.tree.grid(row=1, column=0, sticky="nsew", pady=(8, 0))
         self.tree.tag_configure("done", foreground=OK_GREEN)
@@ -704,6 +774,7 @@ class ResolveAudioEncoder(_BaseTk):
 
         self.var_codec.set(codec)
         self.var_auto_start.set(bool(cfg.get("auto_start", False)))
+        self.var_remux_mp4.set(bool(cfg.get("remux_mp4", False)))
 
     def _save_config(self) -> None:
         codec = self.var_codec.get().upper()
@@ -715,6 +786,7 @@ class ResolveAudioEncoder(_BaseTk):
             "codec": self.var_codec.get().upper(),
             "bitrates": self.bitrates,
             "auto_start": bool(self.var_auto_start.get()),
+            "remux_mp4": bool(self.var_remux_mp4.get()),
         }
         try:
             CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -884,7 +956,8 @@ class ResolveAudioEncoder(_BaseTk):
         self._refresh_counts()
 
         self._worker = threading.Thread(target=self._worker_loop,
-                                        args=(pending,), daemon=True)
+                                        args=(pending, bool(self.var_remux_mp4.get())),
+                                        daemon=True)
         self._worker.start()
 
     def _stop_queue(self) -> None:
@@ -899,7 +972,7 @@ class ResolveAudioEncoder(_BaseTk):
             except Exception:
                 pass
 
-    def _worker_loop(self, pending: list[Job]) -> None:
+    def _worker_loop(self, pending: list[Job], remux_mp4: bool = False) -> None:
         codec = self.var_codec.get().upper()
         bitrate = normalize_bitrate(self.var_bitrate.get())
         total = len(pending)
@@ -911,7 +984,7 @@ class ResolveAudioEncoder(_BaseTk):
                 self._msg.put(("update", job.id, job.status, job.progress, job.error))
                 continue
             self._msg.put(("processing", job.id))
-            ok = self._transcode(job, codec, bitrate)
+            ok = self._transcode(job, codec, bitrate, remux_mp4)
             completed += 1
             if not ok and self._stop_event.is_set():
                 job.status = "Cancelled"
@@ -925,7 +998,8 @@ class ResolveAudioEncoder(_BaseTk):
 
         self._msg.put(("finished",))
 
-    def _transcode(self, job: Job, codec: str, bitrate: str) -> bool:
+    def _transcode(self, job: Job, codec: str, bitrate: str,
+                   remux_mp4: bool = False) -> bool:
         output = unique_output_path(job.path, codec)
         job.output = output
 
@@ -940,9 +1014,29 @@ class ResolveAudioEncoder(_BaseTk):
             self.ffmpeg, job.path, codec, bitrate, output,
             duration=job.duration, on_progress=on_progress,
             stop_event=self._stop_event, on_proc=on_proc)
-        if not ok and error:
-            job.error = error
-        return ok
+        if not ok:
+            if error:
+                job.error = error
+            return False
+        if not remux_mp4:
+            return True
+
+        # Second pass: wrap the result in an MP4 container, then drop the
+        # intermediate MKV.  The MKV is kept if the remux fails.
+        mp4 = unique_remux_path(output)
+        job.progress = 0.0
+        self._msg.put(("status", job.id, "Remuxing to MP4"))
+        ok, error = run_remux(
+            self.ffmpeg, output, mp4,
+            duration=job.duration, on_progress=on_progress,
+            stop_event=self._stop_event, on_proc=on_proc)
+        if not ok:
+            detail = error if error else "unknown error"
+            job.error = f"MP4 remux failed (MKV kept): {detail}"
+            return False
+        _safe_unlink(output)
+        job.output = mp4
+        return True
 
     # -- message pump -------------------------------------------------------
     def _poll_messages(self) -> None:
@@ -964,6 +1058,13 @@ class ResolveAudioEncoder(_BaseTk):
                         job.progress = 0.0
                         self._update_row(job)
                         self._set_status(f"Processing {job.path.name}")
+                elif kind == "status":
+                    _, job_id, text = msg
+                    job = self._job_by_id(job_id)
+                    if job:
+                        job.status = text
+                        self._update_row(job)
+                        self._set_status(f"{text} · {job.path.name}")
                 elif kind == "progress":
                     _, job_id, pct = msg
                     job = self._job_by_id(job_id)
@@ -999,14 +1100,14 @@ class ResolveAudioEncoder(_BaseTk):
             return
         if progress_only:
             self.tree.set(job.row, "progress", f"{job.progress:.0f}%")
-            self.tree.set(job.row, "status", "Processing")
+            self.tree.set(job.row, "status", job.status)
             return
         tags = ()
         if job.status == "Done":
             tags = ("done",)
         elif job.status == "Error":
             tags = ("error",)
-        elif job.status == "Processing":
+        elif job.status not in ("Queued", "Cancelled"):
             tags = ("processing",)
         self.tree.item(
             job.row, tags=tags,

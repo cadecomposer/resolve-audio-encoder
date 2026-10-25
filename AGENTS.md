@@ -52,6 +52,8 @@ functions and classes) and a **GUI** class on top. Keep it that way.
 - `tool_path(name)` — `shutil.which` wrapper.
 - `unique_output_path(source, codec, out_dir=None)` — returns
   `<stem> [CODEC].mkv`, appending ` (2)`, ` (3)`… to avoid overwriting.
+- `unique_remux_path(mkv_path)` — returns `<stem> [CODEC].mp4` next to the MKV,
+  appending ` (2)`, ` (3)`… to avoid overwriting.
 - `probe_media(path, ffprobe="ffprobe")` — returns `(duration_seconds, audio_stream_count)` via ffprobe JSON.
 - `normalize_bitrate(value)` — `"192"` → `"192k"`, `"128k"` stays.
 - `parse_time_to_seconds(value)` — parses ffmpeg `HH:MM:SS.micro`.
@@ -59,9 +61,14 @@ functions and classes) and a **GUI** class on top. Keep it that way.
 - `build_ffmpeg_cmd(ffmpeg, source, codec, bitrate, output)` — builds the
   `ffmpeg` argument list. **This is the single source of truth for the
   transcode.**
-- `run_transcode(...)` — runs the subprocess, parses `-progress pipe:1`,
-  supports cancellation via a `threading.Event`, returns `(ok, error_message)`.
-  Calls `on_progress(pct)` and `on_proc(proc|None)` callbacks.
+- `build_remux_cmd(ffmpeg, source, output)` — builds the MP4 remux command
+  (stream copy, video + audio only).
+- `run_transcode(...)` / `run_remux(...)` — thin wrappers that build the
+  command and hand it to `_run_ffmpeg(...)`, which runs the subprocess, parses
+  `-progress pipe:1`, supports cancellation via a `threading.Event`, and
+  returns `(ok, error_message)`. Calls `on_progress(pct)` and
+  `on_proc(proc|None)` callbacks. **All subprocess plumbing lives in
+  `_run_ffmpeg` — change it there, not in the wrappers.**
 - `_safe_unlink(path)` — best-effort cleanup of partial output.
 - `NativeFileDialog` — dispatches to the desktop-native picker.
 - `uri_to_path(value)` — converts `file://` URIs to plain paths.
@@ -114,38 +121,47 @@ These have bitten before — read them before changing related code.
    audio track. Multi-track files are a first-class use case.
 
 2. **ffmpeg's `out_time_ms` is actually microseconds.** This is an ffmpeg
-   quirk. `run_transcode` deliberately treats both `out_time_us` and
+   quirk. `_run_ffmpeg` deliberately treats both `out_time_us` and
    `out_time_ms` as microseconds. Do not "fix" this to divide by 1000.
 
 3. **Progress uses stdout, errors use stderr.** Merge them with
    `stderr=subprocess.STDOUT` and filter known progress keys; anything else is
    collected as error tail. Don't add a second pipe read (deadlock risk).
 
-4. **Map streams explicitly.** The command maps `0:v?`, `0:a?`, `0:s?`,
-   `0:t?` and uses `-c:v copy` + `-c:s copy`. Use `?` so missing stream types
-   don't fail. Removing the maps can drop audio tracks or attachments.
+4. **Map streams explicitly.** The transcode command maps `0:v?`, `0:a?`,
+   `0:s?`, `0:t?` and uses `-c:v copy` + `-c:s copy`. Use `?` so missing stream
+   types don't fail. Removing the maps can drop audio tracks or attachments.
+   The **MP4 remux deliberately maps only `0:v?` and `0:a?`**: MP4 cannot carry
+   MKV subtitles or attachments, and keeping them makes the mux fail.
 
-5. **Never overwrite.** Always route output through `unique_output_path()`.
-   Partial outputs are deleted on failure/cancel via `_safe_unlink`.
+5. **Never overwrite.** Always route output through `unique_output_path()` (and
+   `unique_remux_path()` for the optional MP4 pass). Partial outputs are deleted
+   on failure/cancel via `_safe_unlink`.
 
-6. **Drag & drop is XDND/XWayland.** Tk has no Wayland backend; the app runs
+6. **MP4 remux deletes the MKV only on success.** `_transcode()` keeps the MKV
+   when the remux fails (the error message says so) so the user never loses a
+   finished transcode. Cancelling the remux likewise keeps the MKV. The setting
+   is a single option (`var_remux_mp4`) — remuxing and deleting are not
+   independent toggles.
+
+7. **Drag & drop is XDND/XWayland.** Tk has no Wayland backend; the app runs
    through XWayland. `tkinterdnd2` must be importable or DnD is disabled.
    `run.sh` guarantees this. The event names are `<<DropEnter>>` /
    `<<DropLeave>>` (**not** `<<DragEnter>>`/`<<DragLeave>>`).
 
-7. **Drop payloads vary.** `_parse_drop_data()` handles brace-wrapped paths
+8. **Drop payloads vary.** `_parse_drop_data()` handles brace-wrapped paths
    (`{/a b/c.mp4}`), `text/uri-list` (`file://…` per line), and unbraced single
    paths with spaces. Extend it rather than adding format-specific branches
    elsewhere. `tk.splitlist` alone is not enough.
 
-8. **Native dialogs are external processes.** `NativeFileDialog` shells out to
+9. **Native dialogs are external processes.** `NativeFileDialog` shells out to
    `kdialog` (preferred on KDE) then `zenity`, falling back to Tk's dialog.
    A return code of `1` means the user cancelled → return `[]`, not an error.
 
-9. **Auto-start can re-enter `_start_queue`.** `add_paths` calls
+10. **Auto-start can re-enter `_start_queue`.** `add_paths` calls
    `_start_queue` when `var_auto_start` is set; guard on `self._running`.
 
-10. **Do not put blocking work on the UI thread.** Transcoding and probing
+11. **Do not put blocking work on the UI thread.** Transcoding and probing
     belong on worker threads.
 
 ## Testing
@@ -184,6 +200,27 @@ Then confirm with ffprobe that the **video codec is unchanged**, the audio
 count is preserved, and the audio codec matches. For a real multi-track AV1
 sample use `2025-01-14 01-08-15.mp4` (2 audio tracks, spaces in name).
 
+For the optional MP4 pass, remux the produced MKV and check the streams:
+
+```bash
+.venv/bin/python - <<'PY'
+import sys; sys.path.insert(0, ".")
+import resolve_audio_encoder as rae
+from pathlib import Path
+mkv = Path("/tmp/raetest/test clip aac spaces [FLAC].mkv")
+mp4 = rae.unique_remux_path(mkv)
+print(rae.run_remux("ffmpeg", mkv, mp4))
+print(rae._safe_unlink(mkv), mkv.exists(), mp4.exists())
+PY
+ffprobe -v error -show_entries stream=codec_type,codec_name -of csv=p=0 \
+  "/tmp/raetest/test clip aac spaces [FLAC].mp4"
+```
+
+The MP4 must contain the same video codec and the same number of audio tracks;
+subtitles and attachments are expected to be absent. Also test an MKV that
+*does* carry subtitles/attachments (the remux must still succeed), and a failing
+remux target (e.g. a non-existent directory) — the MKV must be kept.
+
 ### 2. GUI smoke test (needs a display)
 
 ```bash
@@ -203,16 +240,19 @@ PY
 
 Drive `add_paths()` then `_start_queue()` with `app.mainloop()`, scheduling
 checks via `app.after(...)`. Always include a timeout watchdog. Clean up any
-generated `* [CODEC].mkv` files afterwards.
+generated `* [CODEC].mkv` / `* [CODEC].mp4` files afterwards. Run it once with
+`app.var_remux_mp4.set(True)` and confirm the job ends on a `.mp4` with no MKV
+left next to it.
 
 ### Checklist for a change
 
 - [ ] `.venv/bin/python -m py_compile resolve_audio_encoder.py`
 - [ ] `.venv/bin/python -m pyflakes resolve_audio_encoder.py` (clean)
 - [ ] Engine test passes for all three codecs, multi-track + spaces
+- [ ] MP4 remux test passes (same video/audio, MKV deleted on success)
 - [ ] GUI still launches and DnD registers (`DND_AVAILABLE` true via `run.sh`)
-- [ ] Preferences still round-trip (codec / bitrate / auto-start)
-- [ ] No generated `.mkv` left in the repo
+- [ ] Preferences still round-trip (codec / bitrate / auto-start / remux)
+- [ ] No generated `.mkv` or `.mp4` left in the repo
 
 ## Style / PR notes
 
