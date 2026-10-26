@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Resolve Audio Encoder
+GenericName=Video Audio Transcoder
+Comment=Transcode audio to FLAC, OPUS or MP3 for DaVinci Resolve
+Exec=resolve-audio-encoder
+Icon=resolve-audio-encoder
+Terminal=false
+Categories=AudioVideo;
+Keywords=resolve;davinci;ffmpeg;transcode;flac;aac;audio;
+StartupNotify=true
+StartupWMClass=resolve-audio-encoder

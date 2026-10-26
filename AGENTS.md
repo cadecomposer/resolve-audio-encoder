@@ -19,8 +19,13 @@ binaries.
 resolve_audio_encoder.py   # THE ENTIRE APP (engine + GUI, ~1000 lines)
 run.sh                     # creates .venv, installs deps, launches the app
 requirements.txt           # tkinterdnd2
+icon.png                   # app icon (window/taskbar + AppImage)
+packaging/
+  build-appimage.sh        # PyInstaller + appimagetool build script
+  AppRun                   # AppImage entry point
+  resolve-audio-encoder.desktop
 README.md                  # user-facing docs
-.gitignore                 # ignores .venv/, __pycache__/
+.gitignore                 # ignores .venv/, __pycache__/, build outputs
 *.mp4                      # test media (do not commit large changes / delete)
 ```
 
@@ -37,6 +42,11 @@ The `.venv/` directory is created by `run.sh` and is gitignored.
 
 # Lint (install first: .venv/bin/pip install pyflakes)
 .venv/bin/python -m pyflakes resolve_audio_encoder.py
+
+# Build a self-contained AppImage (uses system appimagetool if present)
+./packaging/build-appimage.sh
+# Smaller build using the host ffmpeg instead of a bundled static one
+BUNDLE_FFMPEG=0 ./packaging/build-appimage.sh
 
 # Probe a file
 ffprobe -v error -show_entries stream=index,codec_type,codec_name,bitrate -of default=nw=1 file.mp4

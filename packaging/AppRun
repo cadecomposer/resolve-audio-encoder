@@ -1,0 +1,12 @@
+#!/bin/sh
+# AppImage entry point.
+set -eu
+
+HERE="$(dirname "$(readlink -f "$0")")"
+
+# Bundled ffmpeg/ffprobe (when built with BUNDLE_FFMPEG=1) live in usr/bin and
+# are found by the app through shutil.which(); prepending also keeps a bundled
+# static ffmpeg from being shadowed by a system one.
+export PATH="$HERE/usr/bin:$PATH"
+
+exec "$HERE/usr/bin/resolve-audio-encoder" "$@"

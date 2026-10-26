@@ -48,6 +48,9 @@ except Exception:  # pragma: no cover - depends on environment
 
 APP_NAME = "Resolve Audio Encoder"
 APP_VERSION = "1.0.0"
+# Reverse-DNS-free identifier used by the .desktop file / AppImage and as the
+# Tk window class (StartupWMClass), so the window picks up the app icon.
+APP_ID = "resolve-audio-encoder"
 
 # Supported input extensions (used for the file picker and drag & drop filter).
 VIDEO_EXTENSIONS = {
@@ -83,6 +86,14 @@ ERR_RED   = "#e05a5a"
 
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "resolve-audio-encoder"
 CONFIG_FILE = CONFIG_DIR / "config.json"
+
+
+def resource_path(name: str) -> Path:
+    """Return a bundled resource, whether run from source or a PyInstaller build."""
+    base = getattr(sys, "_MEIPASS", None)
+    if base is not None:
+        return Path(base) / name
+    return Path(__file__).resolve().parent / name
 
 
 # ===========================================================================
@@ -442,11 +453,12 @@ class Job:
 # ===========================================================================
 class ResolveAudioEncoder(_BaseTk):
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(className=APP_ID)
         self.title(f"{APP_NAME} {APP_VERSION}")
         self.geometry("900x620")
         self.minsize(760, 520)
         self.configure(bg=BG)
+        self._set_window_icon()
 
         self.jobs: list[Job] = []
         self._next_id = 1
@@ -479,6 +491,18 @@ class ResolveAudioEncoder(_BaseTk):
         self.after(100, self._poll_messages)
 
     # -- styling ------------------------------------------------------------
+    def _set_window_icon(self) -> None:
+        """Use icon.png for the window/taskbar icon when it is available."""
+        self._icon_image: Optional[tk.PhotoImage] = None
+        icon = resource_path("icon.png")
+        if not icon.exists():
+            return
+        try:
+            self._icon_image = tk.PhotoImage(file=str(icon))
+            self.iconphoto(True, self._icon_image)
+        except tk.TclError:
+            self._icon_image = None
+
     def _build_style(self) -> None:
         style = ttk.Style(self)
         try:

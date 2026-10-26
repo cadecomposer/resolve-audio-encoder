@@ -1,6 +1,12 @@
 # Virtual environment created by run.sh
 .venv/
 
+# AppImage build artifacts (packaging/build-appimage.sh)
+.build-venv/
+build/
+dist/
+*.AppImage
+
 # Python bytecode
 __pycache__/
 *.pyc

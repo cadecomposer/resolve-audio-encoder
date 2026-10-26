@@ -73,6 +73,48 @@ python3 -m venv .venv
 > "Drag & drop unavailable" and only the file picker will work. `./run.sh`
 > makes sure it is present.
 
+## AppImage
+
+Build a self-contained AppImage (Python, Tk, drag & drop, the icon and static
+`ffmpeg`/`ffprobe` are all bundled):
+
+```bash
+./packaging/build-appimage.sh
+```
+
+The result is written to:
+
+```
+dist/Resolve-Audio-Encoder-1.0.0-x86_64.AppImage
+```
+
+Build requirements: `python3` with Tk (`python3-tk` on Debian/Ubuntu), `curl`,
+`tar`, `xz`, and `appimagetool` (used from `PATH` when available, otherwise
+downloaded automatically). PyInstaller and the app's dependencies are installed
+into a throwaway `.build-venv/`, so your normal `.venv/` is untouched.
+
+To build a smaller AppImage that uses the host's `ffmpeg`/`ffprobe` instead of
+bundling them:
+
+```bash
+BUNDLE_FFMPEG=0 ./packaging/build-appimage.sh
+```
+
+Show the app in your launcher after building:
+
+```bash
+chmod +x dist/Resolve-Audio-Encoder-*.AppImage
+./dist/Resolve-Audio-Encoder-*.AppImage
+```
+
+For a proper desktop entry, use an AppImage manager such as AppImageLauncher, or
+copy the `.desktop` file from `packaging/` into `~/.local/share/applications/`.
+
+> AppImages built here target the machine they were built on: the PyInstaller
+> runtime links against the build system's glibc and Tk. Build on the oldest
+> distribution you intend to support if you plan to distribute the file
+> broadly.
+
 ## Usage
 
 1. Launch with `./run.sh`.
@@ -124,6 +166,10 @@ version. If a drag from Dolphin does not register:
 | `resolve_audio_encoder.py` | The whole application (engine + GUI) |
 | `run.sh` | Creates the venv and launches the app |
 | `requirements.txt` | The single optional dependency (`tkinterdnd2`) |
+| `icon.png` | Application / launcher icon (also the window icon) |
+| `packaging/build-appimage.sh` | Builds a self-contained AppImage |
+| `packaging/AppRun` | AppImage entry point |
+| `packaging/resolve-audio-encoder.desktop` | Desktop entry bundled in the AppImage |
 
 ## License
 
