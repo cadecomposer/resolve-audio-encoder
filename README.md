@@ -40,11 +40,11 @@ no place for subtitles or font attachments, so those are not carried over; if
 the remux fails for any reason the MKV is kept and the job is marked failed.
 
 > **OPUS users must enable the MP4 remux.** DaVinci Resolve does not play OPUS
-> audio from an MKV container at all — the file opens, but the audio is silent
-> or the clip is offline. The same OPUS stream works once it is wrapped in an
-> MP4. So with OPUS selected, always tick **“Also remux to MP4”**; the app shows
-> a warning in the settings bar whenever OPUS is chosen. FLAC and MP3 need no
-> special handling and work in either container.
+> audio from an MKV container — the clip loads without sound. The same OPUS
+> stream works once it is wrapped in an MP4. So with OPUS selected, always tick
+> **“Also remux to MP4”**; the app shows a warning in the settings bar whenever
+> OPUS is chosen. FLAC and MP3 need no special handling and work in either
+> container.
 
 ---
 
