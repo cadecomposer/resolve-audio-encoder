@@ -174,6 +174,11 @@ These have bitten before — read them before changing related code.
 11. **Do not put blocking work on the UI thread.** Transcoding and probing
     belong on worker threads.
 
+12. **OPUS needs MP4 in Resolve.** Resolve silently refuses OPUS audio inside
+    an MKV, even though the MKV is valid. Only OPUS-in-MP4 plays. The GUI shows
+    `OPUS_MP4_NOTE` when OPUS is selected (`_apply_codec_ui`); keep that warning
+    and the README note in sync with any change to the remux behaviour.
+
 ## Testing
 
 `ffmpeg`/`ffprobe` and the `.mp4` test media in the repo root are available.

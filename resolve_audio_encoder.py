@@ -14,6 +14,11 @@ Optionally the finished MKV can be remuxed (stream copy, no re-encode) into
 "<name> [CODEC].mp4"; the intermediate MKV is then deleted.  MP4 cannot hold
 subtitles or attachments, so those are dropped in that second pass.
 
+Resolve note: OPUS audio is only playable in Resolve when it lives inside an
+MP4 container.  An OPUS-in-MKV file (the default output) is silently ignored by
+Resolve, so OPUS users must enable the MP4 remux option.  The GUI shows a
+warning whenever OPUS is selected.
+
 Requires: ffmpeg / ffprobe on PATH.
 Optional: tkinterdnd2 (drag-and-drop), kdialog or zenity (native file dialog).
 """
@@ -47,7 +52,7 @@ except Exception:  # pragma: no cover - depends on environment
     _BaseTk = tk.Tk
 
 APP_NAME = "Resolve Audio Encoder"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 # Reverse-DNS-free identifier used by the .desktop file / AppImage and as the
 # Tk window class (StartupWMClass), so the window picks up the app icon.
 APP_ID = "resolve-audio-encoder"
@@ -66,6 +71,11 @@ BITRATE_OPTIONS = {
     "MP3": ["128k", "160k", "192k", "256k", "320k"],
 }
 DEFAULT_BITRATES = {"FLAC": "", "OPUS": "128k", "MP3": "192k"}
+
+# Resolve cannot play OPUS audio from an MKV container — only OPUS inside MP4
+# works.  Shown in the GUI whenever OPUS is selected.
+OPUS_MP4_NOTE = ("⚠  Resolve only plays OPUS inside an MP4 — tick "
+                 "“Also remux to MP4” below when using OPUS.")
 
 # ---------------------------------------------------------------------------
 # DaVinci Resolve inspired dark palette
@@ -522,6 +532,7 @@ class ResolveAudioEncoder(_BaseTk):
         style.configure("Panel.TLabel", background=PANEL, foreground=TEXT)
         style.configure("Dim.TLabel", background=BG, foreground=TEXT_DIM)
         style.configure("PanelDim.TLabel", background=PANEL, foreground=TEXT_DIM)
+        style.configure("Warn.TLabel", background=PANEL, foreground=ACCENT_HI)
         style.configure("Title.TLabel", background=BG, foreground=TEXT,
                         font=("Noto Sans", 13, "bold"))
         style.configure("Status.TLabel", background=PANEL, foreground=TEXT_DIM)
@@ -640,6 +651,15 @@ class ResolveAudioEncoder(_BaseTk):
             style="TCheckbutton")
         self.chk_remux.grid(row=1, column=2, columnspan=6, sticky="w",
                             padx=(20, 0), pady=(8, 0))
+
+        # Shown only for OPUS (see OPUS_MP4_NOTE); grid_remove() in
+        # _apply_codec_ui() hides it for the other codecs.
+        self.lbl_codec_note = ttk.Label(
+            bar, text=OPUS_MP4_NOTE, style="Warn.TLabel", wraplength=760,
+            justify="left")
+        self.lbl_codec_note.grid(row=2, column=0, columnspan=11, sticky="w",
+                                 pady=(8, 0))
+        self.lbl_codec_note.grid_remove()
 
         self.btn_browse = ttk.Button(
             bar, text="Add Files…", command=self._choose_files)
@@ -840,6 +860,11 @@ class ResolveAudioEncoder(_BaseTk):
             self.cmb_bitrate.configure(values=BITRATE_OPTIONS.get(codec, []),
                                        state="normal")
             self.var_bitrate.set(self.bitrates.get(codec, DEFAULT_BITRATES[codec]))
+        # Resolve ignores OPUS audio in MKV, so nag about the MP4 remux.
+        if codec == "OPUS":
+            self.lbl_codec_note.grid()
+        else:
+            self.lbl_codec_note.grid_remove()
 
     # -- queue --------------------------------------------------------------
     def _choose_files(self) -> None:

@@ -13,6 +13,8 @@ handles happily.
 - Copies video, subtitles and all **multiple audio tracks** into a new MKV
 - Optional **MP4 remux**: after transcoding, copy the result into an MP4
   container and delete the intermediate MKV (subtitles/attachments are dropped)
+- **OPUS requires the MP4 remux** — Resolve does not play OPUS from an MKV
+  (the app warns you about this when OPUS is selected)
 - Optional **auto-start** when files are added (off by default)
 - Preferences persist to a config file
 - UI palette inspired by DaVinci Resolve
@@ -36,8 +38,13 @@ My Video.mp4   ->   My Video [FLAC].mp4
 The MP4 is a stream copy of the MKV, so the video is still untouched. MP4 has
 no place for subtitles or font attachments, so those are not carried over; if
 the remux fails for any reason the MKV is kept and the job is marked failed.
-Note that FLAC and OPUS in MP4 are legal but not universally supported — if your
-player or Resolve refuses the MP4, use MP3 or keep the default MKV output.
+
+> **OPUS users must enable the MP4 remux.** DaVinci Resolve does not play OPUS
+> audio from an MKV container at all — the file opens, but the audio is silent
+> or the clip is offline. The same OPUS stream works once it is wrapped in an
+> MP4. So with OPUS selected, always tick **“Also remux to MP4”**; the app shows
+> a warning in the settings bar whenever OPUS is chosen. FLAC and MP3 need no
+> special handling and work in either container.
 
 ---
 
@@ -85,7 +92,7 @@ Build a self-contained AppImage (Python, Tk, drag & drop, the icon and static
 The result is written to:
 
 ```
-dist/Resolve-Audio-Encoder-1.0.0-x86_64.AppImage
+dist/Resolve-Audio-Encoder-1.0.1-x86_64.AppImage
 ```
 
 Build requirements: `python3` with Tk (`python3-tk` on Debian/Ubuntu), `curl`,
@@ -119,8 +126,11 @@ copy the `.desktop` file from `packaging/` into `~/.local/share/applications/`.
 
 1. Launch with `./run.sh`.
 2. Drag videos into the window, or click **Add Files…**.
-3. Pick the audio **codec** and, if not FLAC, a **bitrate**.
-4. Optionally tick **Also remux to MP4 (delete the MKV afterwards)**.
+3. Pick the audio **codec** and, if not FLAC, a **bitrate**. With **OPUS**
+   selected the app reminds you to enable the MP4 remux (Resolve cannot play
+   OPUS from an MKV).
+4. Optionally tick **Also remux to MP4 (delete the MKV afterwards)** — required
+   for OPUS.
 5. Click **Start** (or tick **Auto-start when files are added**).
 6. Find the `... [CODEC].mkv` (or `.mp4`) files next to your originals.
 
@@ -158,6 +168,7 @@ version. If a drag from Dolphin does not register:
 | Drag & drop does nothing | Run via `./run.sh`; use **Add Files…** as a fallback |
 | "Add Files…" opens an ugly dialog | Install `kdialog` or `zenity` for the native picker |
 | Resolve still won't play audio | Make sure you opened the generated **`.mkv`**, not the original file |
+| OPUS audio is silent in Resolve | OPUS only works in MP4: tick **Also remux to MP4** and use the generated `.mp4` |
 
 ## Files
 
@@ -170,6 +181,20 @@ version. If a drag from Dolphin does not register:
 | `packaging/build-appimage.sh` | Builds a self-contained AppImage |
 | `packaging/AppRun` | AppImage entry point |
 | `packaging/resolve-audio-encoder.desktop` | Desktop entry bundled in the AppImage |
+
+## Changelog
+
+### 1.0.1
+
+- Documented that DaVinci Resolve cannot play **OPUS audio from MKV** — OPUS
+  only works when the file is remuxed to MP4.
+- The settings bar now shows a warning whenever OPUS is selected, pointing at
+  the MP4 remux option.
+
+### 1.0.0
+
+- First release: MKV remux + FLAC/OPUS/MP3 audio transcode, optional MP4
+  remux, queue with drag & drop, native file dialogs, AppImage packaging.
 
 ## License
 
