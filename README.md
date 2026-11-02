@@ -92,7 +92,7 @@ Build a self-contained AppImage (Python, Tk, drag & drop, the icon and static
 The result is written to:
 
 ```
-dist/Resolve-Audio-Encoder-1.0.1-x86_64.AppImage
+dist/Resolve-Audio-Encoder-1.0.2-x86_64.AppImage
 ```
 
 Build requirements: `python3` with Tk (`python3-tk` on Debian/Ubuntu), `curl`,
@@ -183,6 +183,11 @@ version. If a drag from Dolphin does not register:
 | `packaging/resolve-audio-encoder.desktop` | Desktop entry bundled in the AppImage |
 
 ## Changelog
+
+### 1.0.2
+
+- Fixed the OPUS warning to point at the “Also remux to MP4” box above it,
+  not below.
 
 ### 1.0.1
 

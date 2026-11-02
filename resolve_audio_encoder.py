@@ -52,7 +52,7 @@ except Exception:  # pragma: no cover - depends on environment
     _BaseTk = tk.Tk
 
 APP_NAME = "Resolve Audio Encoder"
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.2"
 # Reverse-DNS-free identifier used by the .desktop file / AppImage and as the
 # Tk window class (StartupWMClass), so the window picks up the app icon.
 APP_ID = "resolve-audio-encoder"
@@ -75,7 +75,7 @@ DEFAULT_BITRATES = {"FLAC": "", "OPUS": "128k", "MP3": "192k"}
 # Resolve cannot play OPUS audio from an MKV container — only OPUS inside MP4
 # works.  Shown in the GUI whenever OPUS is selected.
 OPUS_MP4_NOTE = ("⚠  Resolve only plays OPUS inside an MP4 — tick "
-                 "“Also remux to MP4” below when using OPUS.")
+                 "“Also remux to MP4” above when using OPUS.")
 
 # ---------------------------------------------------------------------------
 # DaVinci Resolve inspired dark palette
